@@ -205,6 +205,7 @@
                  :analyze-protocol-impls? analyze-protocol-impls?
                  :analyze-keywords? analyze-keywords?
                  :analyze-arglists? (get analysis-cfg :arglists)
+                 :analyze-schemas? (get analysis-cfg :schemas)
                  :analyze-java-class-defs? analyze-java-class-defs?
                  :analyze-java-class-usages? analyze-java-class-usages?
                  :analyze-java-member-defs? analyze-java-member-defs?

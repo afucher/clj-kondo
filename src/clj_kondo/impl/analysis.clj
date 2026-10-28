@@ -96,7 +96,7 @@
                                     :protocol-ns :protocol-name
                                     :imported-ns
                                     :name-row :name-col :name-end-col :name-end-row
-                                    :arglist-strs :end-row :end-col])
+                                    :arglist-strs :schema :end-row :end-col])
           overrides (when (utils/one-of ns [clojure.core cljs.core])
                       (overrides/overrides (case base-lang
                                              :clj '{:clj {:defs {clojure.core {}}}}

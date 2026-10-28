@@ -1174,6 +1174,39 @@
                        (mapv #(assoc % :arglist-strs m/absent)))]
         (assert-submaps2 expected var-definitions)))))
 
+(deftest analysis-schemas-test
+  (let [code "(ns foo (:require [schema.core :as s]))
+              (s/defschema User {:name s/Str})
+              (s/defn f1 :- User \"doc\" [id :- s/Uuid db] nil)
+              (s/defn f2 :- (s/maybe s/Int)
+                ([x :- s/Int] x)
+                ([x [a b] :- [s/Int] & more :- [User]] [x a b more]))
+              (s/defn f3 [x] x)
+              (defn f4 [x] x)"]
+    (testing "schema info is exposed with :schemas true"
+      (let [{:keys [var-definitions]}
+            (analyze code {:config {:analysis {:schemas true}}})]
+        (assert-submaps2
+         [{:name 'User :schema m/absent}
+          {:name 'f1
+           :schema {:output "User"
+                    :arities [{:inputs [{:arg "id" :schema "s/Uuid"}
+                                        {:arg "db" :schema m/absent}]}]}}
+          {:name 'f2
+           :schema {:output "(s/maybe s/Int)"
+                    :arities [{:inputs [{:arg "x" :schema "s/Int"}]}
+                              {:inputs [{:arg "x" :schema m/absent}
+                                        {:arg "[a b]" :schema "[s/Int]"}
+                                        {:arg "more" :rest true :schema "[User]"}]}]}}
+          {:name 'f3
+           :schema {:output m/absent
+                    :arities [{:inputs [{:arg "x" :schema m/absent}]}]}}
+          {:name 'f4 :schema m/absent}]
+         var-definitions)))
+    (testing "schema info is absent by default"
+      (let [{:keys [var-definitions]} (analyze code)]
+        (is (every? #(not (contains? % :schema)) var-definitions))))))
+
 (deftest analysis-meta-arglists-test
   (doseq [analysis-opts [true
                          {:arglists true}
