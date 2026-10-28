@@ -1187,7 +1187,11 @@
 
 (defn analyze-defn
   [ctx expr defined-by defined-by->lint-as]
-  (let [ns-name (-> ctx :ns :name)
+  (let [;; set by analyze-schema for s/defn: only goes to this var-definition's
+        ;; context, must not leak into the body or nested forms
+        schema-info (:schema-info ctx)
+        ctx (if schema-info (dissoc ctx :schema-info) ctx)
+        ns-name (-> ctx :ns :name)
         ;; "my-fn docstring" {:no-doc true} [x y z] x
         [name-node & children] (next (:children expr))
         name-node-meta-nodes (:meta name-node)
@@ -1318,7 +1322,9 @@
           (swap! (:inline-configs ctx) conj hook-cfg))))
     (when fn-name
       (namespace/reg-var!
-       ctx ns-name fn-name expr
+       (cond-> ctx
+         schema-info (update :context utils/deep-merge {:schema.core schema-info}))
+       ns-name fn-name expr
        (assoc-some var-leading-meta
                    :user-meta (when (:analysis-var-meta ctx)
                                 (conj (or (:user-meta var-leading-meta) []) meta-node-meta meta-node2-meta))
@@ -2220,7 +2226,12 @@
 (declare analyze-defprotocol)
 
 (defn analyze-schema [ctx fn-sym expr defined-by defined-by->lint-as]
-  (let [{:keys [expr schemas]}
+  (let [ctx (if (and (= 'defn fn-sym)
+                     (analysis/context-selected? ctx :schema.core))
+              ;; extracted before expand-schema strips the :- annotations
+              (assoc ctx :schema-info (schema/defn-schema-info expr))
+              ctx)
+        {:keys [expr schemas]}
         (schema/expand-schema ctx
                               fn-sym
                               expr)]

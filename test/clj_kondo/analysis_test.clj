@@ -1174,6 +1174,47 @@
                        (mapv #(assoc % :arglist-strs m/absent)))]
         (assert-submaps2 expected var-definitions)))))
 
+(deftest analysis-schema-context-test
+  (let [code "(ns foo (:require [schema.core :as s]))
+              (s/defschema User {:name s/Str})
+              (s/defn f1 :- User \"doc\" [id :- s/Uuid db] {:k id})
+              (s/defn f2 :- (s/maybe s/Int)
+                ([x :- s/Int] x)
+                ([x [a b] :- [s/Int] & more :- [User]] [x a b more]))
+              (s/defn f3 [x] x)
+              (defn f4 [x] x)"
+        f1-ctx {:output "User"
+                :arities [{:inputs [{:arg "id" :schema "s/Uuid"}
+                                    {:arg "db" :schema m/absent}]}]}]
+    (doseq [selector [[:schema.core] true]]
+      (testing (str "schema info is exposed in var-definition context with :context " selector)
+        (let [{:keys [var-definitions keywords]}
+              (analyze code {:config {:analysis {:context selector
+                                                 :keywords true}}})]
+          (assert-submaps2
+           [{:name 'User :context m/absent}
+            {:name 'f1 :context {:schema.core f1-ctx}}
+            {:name 'f2
+             :context {:schema.core
+                       {:output "(s/maybe s/Int)"
+                        :arities [{:inputs [{:arg "x" :schema "s/Int"}]}
+                                  {:inputs [{:arg "x" :schema m/absent}
+                                            {:arg "[a b]" :schema "[s/Int]"}
+                                            {:arg "more" :rest true :schema "[User]"}]}]}}}
+            {:name 'f3
+             :context {:schema.core {:output m/absent
+                                     :arities [{:inputs [{:arg "x" :schema m/absent}]}]}}}
+            {:name 'f4 :context m/absent}]
+           var-definitions)
+          (testing "schema context does not leak into the body"
+            (let [k-usages (filter #(= "k" (:name %)) keywords)]
+              (is (= 1 (count k-usages)))
+              (is (not-any? #(get-in % [:context :schema.core]) k-usages)))))))
+    (testing "schema context is absent when :schema.core is not selected"
+      (doseq [cfg [{} {:context [:re-frame.core]}]]
+        (let [{:keys [var-definitions]} (analyze code {:config {:analysis cfg}})]
+          (is (every? #(not (contains? % :context)) var-definitions)))))))
+
 (deftest analysis-meta-arglists-test
   (doseq [analysis-opts [true
                          {:arglists true}
